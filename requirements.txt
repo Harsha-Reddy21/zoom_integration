@@ -1,0 +1,13 @@
+# API Framework
+fastapi
+uvicorn[standard]
+
+# HTTP Requests
+requests
+
+# Environment Variables
+python-dotenv
+
+
+
+

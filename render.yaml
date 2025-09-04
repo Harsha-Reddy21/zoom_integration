@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: zoom-integration
+    env: docker
+    region: ohio
+    plan: free
+    branch: main
+    healthCheckPath: /
+    envVars:
+      - key: ZOOM_ACCOUNT_ID
+        sync: false
+      - key: ZOOM_CLIENT_ID
+        sync: false
+      - key: ZOOM_CLIENT_SECRET
+        sync: false
+      - key: ZOOM_VERIFICATION_TOKEN
+        sync: false
