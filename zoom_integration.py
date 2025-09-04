@@ -8,6 +8,9 @@ import uvicorn
 from requests.auth import HTTPBasicAuth
 import hashlib
 import hmac
+import asyncio
+from rtms_client import ZoomRTMSClient
+from video_processor import VideoProcessor
 
 load_dotenv()
 
@@ -79,7 +82,9 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
         meeting_id = body.get("payload", {}).get("object", {}).get("id")
         if meeting_id:
             access_token = get_access_token()
+            # Start both recording processing and real-time video processing
             background_tasks.add_task(process_recording, meeting_id, access_token)
+            background_tasks.add_task(start_rtms_processing, meeting_id)
         return {"status": "processing"}
     
     elif event_type == "recording.completed":
@@ -108,6 +113,33 @@ async def list_meetings():
         return response.json()
     else:
         raise HTTPException(status_code=response.status_code, detail="Failed to get meetings")
+
+# Function to start RTMS processing
+async def start_rtms_processing(meeting_id):
+    """Start processing real-time media streams for a meeting"""
+    try:
+        # Initialize video processor
+        processor = VideoProcessor()
+        
+        # Initialize RTMS client
+        client = ZoomRTMSClient()
+        
+        # Connect to RTMS
+        connected = await client.connect_to_rtms(meeting_id)
+        if not connected:
+            print(f"Failed to connect to RTMS for meeting {meeting_id}")
+            return
+        
+        # Process video data
+        await client.process_video_data(processor.process_frame)
+    except Exception as e:
+        print(f"Error in RTMS processing: {e}")
+
+@app.get("/start-rtms/{meeting_id}")
+async def start_rtms(meeting_id: str, background_tasks: BackgroundTasks):
+    """Endpoint to manually start RTMS processing for a meeting"""
+    background_tasks.add_task(start_rtms_processing, meeting_id)
+    return {"status": "RTMS processing started", "meeting_id": meeting_id}
 
 if __name__ == "__main__":
     uvicorn.run("zoom_integration:app", host="0.0.0.0", port=8000, reload=True)

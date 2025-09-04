@@ -8,6 +8,13 @@ requests
 # Environment Variables
 python-dotenv
 
+# WebSockets for RTMS
+websockets
 
+# Async support
+asyncio
 
+# Video processing (optional)
+opencv-python
+numpy
 
