@@ -6,6 +6,8 @@ import requests
 from dotenv import load_dotenv
 import uvicorn
 from requests.auth import HTTPBasicAuth
+import hashlib
+import hmac
 
 load_dotenv()
 
@@ -47,18 +49,42 @@ async def process_recording(meeting_id: str, access_token: str):
         return recording_data
     return None
 
+@app.get("/")
+async def health_check():
+    """Health check endpoint for Render and Zoom webhook validation"""
+    return {"status": "ok"}
+
 @app.post("/webhook")
-async def zoom_webhook(event: ZoomEvent, background_tasks: BackgroundTasks):
-    if event.event == "meeting.started":
-        meeting_id = event.payload.get("object", {}).get("id")
+async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
+    body = await request.json()
+    event_type = body.get("event")
+    
+    # Handle Zoom's URL validation
+    if event_type == "endpoint.url_validation":
+        plain_token = body.get("payload", {}).get("plainToken")
+        if plain_token and VERIFICATION_TOKEN:
+            # Generate hash for validation
+            encoded_token = plain_token.encode('utf-8')
+            encoded_secret = VERIFICATION_TOKEN.encode('utf-8')
+            hash_object = hmac.new(encoded_secret, encoded_token, hashlib.sha256)
+            encrypted_token = hash_object.hexdigest()
+            
+            return {
+                "plainToken": plain_token,
+                "encryptedToken": encrypted_token
+            }
+    
+    # Handle regular Zoom events
+    if event_type == "meeting.started":
+        meeting_id = body.get("payload", {}).get("object", {}).get("id")
         if meeting_id:
             access_token = get_access_token()
             background_tasks.add_task(process_recording, meeting_id, access_token)
         return {"status": "processing"}
     
-    elif event.event == "recording.completed":
-        recording_files = event.payload.get("object", {}).get("recording_files", [])
-        meeting_id = event.payload.get("object", {}).get("id")
+    elif event_type == "recording.completed":
+        recording_files = body.get("payload", {}).get("object", {}).get("recording_files", [])
+        meeting_id = body.get("payload", {}).get("object", {}).get("id")
         
         if recording_files and meeting_id:
             access_token = get_access_token()
@@ -85,5 +111,3 @@ async def list_meetings():
 
 if __name__ == "__main__":
     uvicorn.run("zoom_integration:app", host="0.0.0.0", port=8000, reload=True)
-    # print("Hello")
-    # print(get_access_token())
